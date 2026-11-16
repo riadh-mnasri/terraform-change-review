@@ -1,0 +1,31 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "complete": true,
+  "resource_changes": [
+    {
+      "address": "google_storage_bucket.archive",
+      "mode": "managed",
+      "type": "google_storage_bucket",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "labels": {
+            "team": "old"
+          },
+          "force_destroy": false
+        },
+        "after": {
+          "labels": {
+            "team": "platform"
+          },
+          "force_destroy": false
+        },
+        "after_unknown": {}
+      }
+    }
+  ]
+}

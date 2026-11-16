@@ -1,0 +1,24 @@
+{
+  "format_version": "1.2",
+  "complete": false,
+  "resource_changes": [
+    {
+      "address": "google_project_iam_member.pending",
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "roles/viewer"
+        },
+        "after_unknown": {
+          "member": true
+        }
+      }
+    }
+  ]
+}

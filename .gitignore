@@ -1,0 +1,11 @@
+/target/
+/.idea/
+*.iml
+*.tfstate*
+*.tfplan
+plan.json
+.terraform/
+.env
+
+# Personal publication draft
+/docs/linkedin-post.md

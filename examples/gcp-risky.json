@@ -1,0 +1,146 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "complete": true,
+  "resource_changes": [
+    {
+      "address": "google_project_iam_member.deployer",
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "roles/owner",
+          "member": "serviceAccount:ci@example-project.iam.gserviceaccount.com"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "google_compute_firewall.ssh",
+      "mode": "managed",
+      "type": "google_compute_firewall",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "source_ranges": [
+            "10.0.0.0/8"
+          ],
+          "allow": [
+            {
+              "protocol": "tcp",
+              "ports": [
+                "22"
+              ]
+            }
+          ]
+        },
+        "after": {
+          "source_ranges": [
+            "0.0.0.0/0"
+          ],
+          "allow": [
+            {
+              "protocol": "tcp",
+              "ports": [
+                "22"
+              ]
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "google_storage_bucket.archive",
+      "mode": "managed",
+      "type": "google_storage_bucket",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "force_destroy": false,
+          "uniform_bucket_level_access": true
+        },
+        "after": {
+          "force_destroy": true,
+          "uniform_bucket_level_access": false
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "google_container_node_pool.workers",
+      "mode": "managed",
+      "type": "google_container_node_pool",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "management": [
+            {
+              "auto_repair": true
+            }
+          ]
+        },
+        "after": {
+          "management": [
+            {
+              "auto_repair": false
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "google_sql_database_instance.orders",
+      "mode": "managed",
+      "type": "google_sql_database_instance",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "delete",
+          "create"
+        ],
+        "before": {
+          "name": "orders-old"
+        },
+        "after": {
+          "name": "orders-new"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "google_secret_manager_secret_version.token",
+      "mode": "managed",
+      "type": "google_secret_manager_secret_version",
+      "provider_name": "registry.terraform.io/hashicorp/google",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "secret_data": "DEMO_SECRET_MUST_NEVER_APPEAR"
+        },
+        "after_unknown": {},
+        "after_sensitive": {
+          "secret_data": true
+        }
+      }
+    }
+  ]
+}
