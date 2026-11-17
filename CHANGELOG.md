@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add a Claude Code walkthrough, deterministic reference results, isolated conversation-test procedure and troubleshooting; record the model test's account credit failure without claiming end-to-end success.
 - Add five Google-provider plan exports and regression tests for selected IAM, firewall and bucket transitions, generated against fabricated local state without cloud apply.
 - Document fixture regeneration, tested versions, expected findings and limits; expand README guidance for interpreting reports.
 
