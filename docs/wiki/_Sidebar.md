@@ -1,0 +1,6 @@
+- [Home](Home.md)
+- [Getting started](Getting-started.md)
+- [Reviewing plans](Reviewing-plans.md)
+- [Claude Code and MCP](Claude-Code-and-MCP.md)
+- [Coverage and validation](Coverage-and-validation.md)
+- [Contributing](Contributing.md)
