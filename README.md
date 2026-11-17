@@ -1,8 +1,8 @@
 # Terraform Change Review
 
-Evidence-based Terraform plan review for Claude Code and CI. Built with Java 17 and the official MCP Java SDK.
+Evidence-based Terraform plan review for Claude Code and CI. Built with Kotlin/JVM, Gradle and the official MCP Java SDK.
 
-[![Java verification](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml/badge.svg)](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml)
+[![Kotlin and Gradle verification](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml/badge.svg)](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml)
 
 **Status: v0.1.0, early MVP.** Inventories resource and output changes across providers; specialized checks currently target selected Google Cloud resources. It does not certify a plan as safe or predict an outage.
 
@@ -26,7 +26,14 @@ flowchart LR
 
 The engine analyzes local plan evidence. Cloud state and effective access are not queried, and the MCP tools cannot apply infrastructure changes.
 
-Browse the [documentation wiki source](docs/wiki/Home.md) for guided entry points. The pages are reviewed through pull requests before publication to the GitHub Wiki.
+Browse the [project wiki](https://github.com/riadh-mnasri/terraform-change-review/wiki) for guided entry points. Its reviewed source lives in [`docs/wiki`](docs/wiki/README.md) and changes go through pull requests.
+
+## Project and community
+
+- [GitHub Discussions](https://github.com/riadh-mnasri/terraform-change-review/discussions) is open for project questions and design feedback. Start with the [project introduction](https://github.com/riadh-mnasri/terraform-change-review/discussions/22) or the question about [Terraform review priorities](https://github.com/riadh-mnasri/terraform-change-review/discussions/23).
+- The [Agents tab](https://github.com/riadh-mnasri/terraform-change-review/agents) offers two repository-specific GitHub Copilot profiles: a read-only Terraform plan reviewer and an open-source maintainer. See [how to use them](docs/github-agents.md).
+- The [contributor graph](https://github.com/riadh-mnasri/terraform-change-review/graphs/contributors) stays current as people contribute. [Riadh Mnasri](https://github.com/riadh-mnasri) started and maintains the project.
+- The project is prepared for signed [Maven Central publication](docs/publishing.md). The artifact is not available there until the maintainer verifies the namespace, configures the required secrets and runs the manual publishing workflow.
 
 ## Quick start
 
@@ -41,13 +48,13 @@ java -jar terraform-change-review-0.1.0.jar --help
 
 On Linux, `sha256sum -c SHA256SUMS` is also supported. The manifest verifies integrity against the release assets; it is not a maintainer signature.
 
-Alternatively, clone the repository and build with the Maven Wrapper (Maven 3.9.9, Wrapper 3.3.2). Wrapper and distribution checksums are pinned. The initial build needs network access to Maven Central; analysis makes no network calls.
+Alternatively, clone the repository and build with the Gradle Wrapper (Gradle 9.7). The first build downloads Gradle and dependencies from Maven Central; plan analysis itself makes no network calls.
 
 ```sh
-./mvnw clean verify
-java -jar target/terraform-change-review.jar review examples/gcp-risky.json --format markdown --fail-on none
-java -jar target/terraform-change-review.jar review examples/gcp-unknown.json
-java -jar target/terraform-change-review.jar rules
+./gradlew clean build
+java -jar build/libs/terraform-change-review.jar review examples/gcp-risky.json --format markdown --fail-on none
+java -jar build/libs/terraform-change-review.jar review examples/gcp-unknown.json
+java -jar build/libs/terraform-change-review.jar rules
 ```
 
 Generate a plan locally in your infrastructure repository:
@@ -60,10 +67,10 @@ terraform show -json review.tfplan > plan.json
 From that directory, run the built JAR using its absolute path. CLI input is confined to the current directory and descendants, including after symlink resolution.
 
 ```sh
-java -jar /absolute/path/terraform-change-review/target/terraform-change-review.jar review plan.json --format json
+java -jar /absolute/path/terraform-change-review/build/libs/terraform-change-review.jar review plan.json --format json
 ```
 
-If you downloaded the release instead, use the absolute path to `terraform-change-review-0.1.0.jar`. The `target/` path above is for a source build.
+If you downloaded the release instead, use the absolute path to `terraform-change-review-0.1.0.jar`. The `build/libs/` path above is for a source build.
 
 Exit codes: `0` review completed without reaching the selected severity threshold, `1` findings reached the threshold, `2` invalid input/configuration. Default threshold: `high`; use `--fail-on medium` or `--fail-on none`. Exit `0` is not a safety verdict, including for unknown values or incomplete plans. CI must separately decide how to handle coverage and incompleteness.
 
@@ -98,7 +105,7 @@ See the [report contract](docs/report-format.md) for automation and the [sample 
 
 ## Claude Code
 
-Register the downloaded JAR (or use the built target JAR). Replace both absolute paths:
+Register the downloaded JAR (or use the built JAR). Replace both absolute paths:
 
 ```sh
 claude mcp add --scope local --transport stdio terraform-review -- java -jar /absolute/path/terraform-change-review-0.1.0.jar serve --root /absolute/path/infra-repository
@@ -151,10 +158,10 @@ Input is limited to 20 MiB, format version 1.x, and a configured local root. Thi
 
 ## Validation and contributing
 
-Run the test suite with Java 17+:
+Run the build and test suite with Java 17+:
 
 ```sh
-./mvnw --batch-mode --no-transfer-progress clean verify
+./gradlew --no-daemon clean build
 ```
 
 Tests read committed fixtures; they do not need Terraform, a Google account or cloud credentials. GitHub Actions runs the suite and a packaged CLI smoke test on Java 17 and 21.
@@ -162,6 +169,10 @@ Tests read committed fixtures; they do not need Terraform, a Google account or c
 The source tree includes five Google-provider plan exports generated with **Terraform 1.15.7 / hashicorp/google 7.13.0**. They cover project/bucket IAM members and bindings, Compute firewall and Storage bucket transitions. They use a fabricated prior state and `-refresh=false`, with no cloud apply. This tests provider-produced plan structures, defaults and replacement actions for those cases; it does not establish live GCP behavior or a provider-version compatibility matrix. GKE and Cloud SQL checks still use hand-written regressions.
 
 See [Google fixture generation and expected results](docs/google-provider-validation.md), [validation results](docs/validation.md), [rules and limits](docs/rules.md), and [contributing](CONTRIBUTING.md). Submit changes through a dedicated branch and pull request.
+
+For the Kotlin/Gradle build, source layout, Java interoperability and migration validation, see the [migration guide](docs/kotlin-gradle-migration.md).
+
+For a guided overview of the repository setup—including the pull request workflow, GitHub community features, wiki publishing and Maven Central prerequisites—see the [project maintenance guide](docs/project-maintenance.md).
 
 ## Architecture and roadmap
 
@@ -176,5 +187,9 @@ Planned, not implemented: custom organization policies, SARIF, Checkov/OPA adapt
 - [Terraform plan JSON format](https://developer.hashicorp.com/terraform/internals/json-format)
 - [Terraform show and sensitive values](https://developer.hashicorp.com/terraform/cli/commands/show)
 - [Official MCP Java SDK](https://github.com/modelcontextprotocol/java-sdk)
+
+## Contributors
+
+Thanks to everyone who helps improve the project. The current maintainer is [Riadh Mnasri](https://github.com/riadh-mnasri). The [GitHub contributors page](https://github.com/riadh-mnasri/terraform-change-review/graphs/contributors) shows the up-to-date list of contributors.
 
 Licensed under Apache-2.0. No affiliation with HashiCorp or Google Cloud.

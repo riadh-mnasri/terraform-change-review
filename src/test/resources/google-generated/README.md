@@ -8,9 +8,9 @@ From the repository root, run:
 
 ```sh
 python3 scripts/generate-google-fixtures.py
-./mvnw clean verify
+./gradlew clean build
 ```
 
-Terraform 1.15.7 and Python 3.9+ are required for regeneration; the tests themselves need only Java and Maven. See [the validation guide](../../../../docs/google-provider-validation.md) for provider installation, expected findings, provenance and limitations. Regeneration changes timestamps; tests assert behavior rather than exact bytes.
+Terraform 1.15.7 and Python 3.9+ are required for regeneration; the tests themselves need only Java 17+ and Gradle. See [the validation guide](../../../../docs/google-provider-validation.md) for provider installation, expected findings, provenance and limitations. Regeneration changes timestamps; tests assert behavior rather than exact bytes.
 
 Never add production plans, state files, provider binaries, binary plans or credentials here.

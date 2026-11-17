@@ -3,4 +3,6 @@
 - [Reviewing plans](Reviewing-plans.md)
 - [Claude Code and MCP](Claude-Code-and-MCP.md)
 - [Coverage and validation](Coverage-and-validation.md)
+- [Troubleshooting](Troubleshooting.md)
+- [Community](Community.md)
 - [Contributing](Contributing.md)
