@@ -24,7 +24,7 @@ Arrays are reported as a changed parent path in the generic diff. Unknown marker
 
 ## Provider references
 
-Attribute semantics were checked against the provider documentation during implementation. GCP rule fixtures are synthetic plan fragments. Complete plans generated with Terraform 1.15.7 exercise the generic parser using the built-in provider; they do not constitute a Google provider compatibility matrix.
+Attribute semantics were checked against the provider documentation during implementation. Hand-written regressions cover the rules and edge cases. Complete exports generated with Terraform 1.15.7 / Google provider 7.13.0 additionally exercise selected project/bucket IAM, firewall and bucket transitions against fabricated local state. GKE and Cloud SQL still use hand-written scenarios. See [Google plan validation](google-provider-validation.md) for the exact cases, expected findings and reproduction steps. The built-in-provider fixtures separately exercise the generic parser. Neither suite establishes a Google provider compatibility matrix or live cloud behavior.
 
 - [Storage bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket)
 - [Compute firewall](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall)
