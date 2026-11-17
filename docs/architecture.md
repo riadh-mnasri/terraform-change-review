@@ -2,7 +2,7 @@
 
 ## Separate analysis from presentation
 
-`PlanReader` loads bounded, local JSON and rejects duplicate keys. `PlanValidator` validates structure, types, actions and value masks. `ReviewEngine` applies deterministic checks and builds immutable report records. `Main` exposes that engine via a CLI and the official Java MCP SDK over stdio. `Markdown` renders reports for human review.
+`PlanReader` loads bounded, local JSON and rejects duplicate keys. `PlanValidator` validates structure, types, actions and value masks. `ReviewEngine` applies deterministic checks and builds immutable report records. `Main` exposes that engine via a CLI and the official MCP Java SDK over stdio. `Markdown` renders reports for human review. The implementation is Kotlin/JVM; tests retain Java callers to protect the JVM API used by existing integrations.
 
 The analysis needs no cloud account or LLM. This makes examples reproducible, rules reviewable, and the same result usable in CI and a coding assistant.
 
@@ -30,4 +30,4 @@ Rules have shared metadata in RuleCatalog (IDs, severity, scope and input paths)
 
 ## Compatibility
 
-Java 17 baseline. MCP SDK 2.1.0's legacy client/server API is used for stdio compatibility. The integration suite spawns a real server process and exercises initialization, discovery, successful calls and path-boundary rejection with the official SDK client. Claude Code connection and model-backed tool execution are tracked separately; see validation.md.
+Java 17 baseline, Kotlin 2.4.21 and Gradle 9.7. MCP SDK 2.1.0's legacy client/server API is used for stdio compatibility. The integration suite spawns a real server process and exercises initialization, discovery, successful calls and path-boundary rejection with the official SDK client. Claude Code connection and model-backed tool execution are tracked separately; see validation.md.

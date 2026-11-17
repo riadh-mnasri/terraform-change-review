@@ -1,4 +1,7 @@
 /target/
+/build/
+/.gradle/
+/.mvn/wrapper/maven-wrapper.jar
 /.idea/
 *.iml
 *.tfstate*
@@ -10,5 +13,4 @@ plan.json
 # Personal publication draft
 /docs/linkedin-post.md
 
-/.mvn/wrapper/maven-wrapper.jar
 /dist/

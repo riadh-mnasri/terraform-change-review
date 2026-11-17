@@ -20,7 +20,7 @@ The baseline is not a recommended security configuration: it deliberately includ
 
 ## Reproduce the exports
 
-Requirements: Terraform **1.15.7**, Python **3.9+**, and network access to download the pinned Google provider. Java is needed only to run the analyzer tests. No Google account, credentials, Terraform backend or infrastructure repository is required.
+Requirements: Terraform **1.15.7**, Python **3.9+**, and network access to download the pinned Google provider. Java 17+ is needed to run the analyzer tests. No Google account, credentials, Terraform backend or infrastructure repository is required.
 
 From the repository root:
 
@@ -28,8 +28,8 @@ From the repository root:
 terraform version
 terraform fmt -check src/test/resources/google-generated/main.tf
 python3 scripts/generate-google-fixtures.py
-./mvnw --batch-mode --no-transfer-progress clean verify
-java -jar target/terraform-change-review.jar review src/test/resources/google-generated/risky-update.json --format markdown --fail-on none
+./gradlew --no-daemon clean build
+java -jar build/libs/terraform-change-review.jar review src/test/resources/google-generated/risky-update.json --format markdown --fail-on none
 ```
 
 The generator:
@@ -47,7 +47,7 @@ The checked-in lockfile covers macOS and Linux on AMD64 and ARM64. If a platform
 
 ## How to review regenerated files
 
-Check the HCL and generator diff before reviewing JSON. Confirm the Terraform/provider versions and resource actions, then run `GoogleProviderPlanTest` through Maven. Review findings and evidence in the CLI output. Timestamps and some metadata can change between runs; compare observable behavior rather than requiring byte-identical exports.
+Check the HCL and generator diff before reviewing JSON. Confirm the Terraform/provider versions and resource actions, then run `GoogleProviderPlanTest` through Gradle. Review findings and evidence in the CLI output. Timestamps and some metadata can change between runs; compare observable behavior rather than requiring byte-identical exports.
 
 All changes, including regenerated fixtures and documentation, go through a dedicated branch and pull request. Never replace these files with a real plan or add a state file, provider binary, saved binary plan or credentials.
 

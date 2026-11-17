@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Migrate production code and build from Java/Maven to Kotlin/Gradle while preserving the CLI and MCP interfaces.
+- Add signed Maven Central publication configuration, repository-specific GitHub Copilot agent profiles, and a contributor link in the README.
+- Expand the published wiki with troubleshooting, clearer contribution guidance, and Gradle-based instructions.
 - Add reviewed wiki source pages and README diagrams for the analysis pipeline and review process.
 - Add five Google-provider plan exports and regression tests for selected IAM, firewall and bucket transitions, generated against fabricated local state without cloud apply.
 - Document fixture regeneration, tested versions, expected findings and limits; expand README guidance for interpreting reports.

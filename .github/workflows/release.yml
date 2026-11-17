@@ -16,21 +16,22 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: maven
+          cache: gradle
       - name: Match tag and project version
         run: |
           python3 - <<'PY'
-          import os, re, xml.etree.ElementTree as ET
+          import os, re
           tag = os.environ['GITHUB_REF_NAME']
-          version = ET.parse('pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text
+          properties = dict(line.split('=', 1) for line in open('gradle.properties') if '=' in line)
+          version = properties['artifactVersion']
           assert re.fullmatch(r'v\d+\.\d+\.\d+', tag), 'Expected a vMAJOR.MINOR.PATCH tag'
-          assert tag == 'v' + version, 'Tag must match the Maven project version'
+          assert tag == 'v' + version, 'Tag must match the Gradle project version'
           PY
-      - run: ./mvnw --batch-mode --no-transfer-progress clean verify
+      - run: ./gradlew --no-daemon clean build
       - name: Package assets and checksums
         run: |
           mkdir -p dist
-          cp target/terraform-change-review.jar "dist/terraform-change-review-${GITHUB_REF_NAME#v}.jar"
+          cp build/libs/terraform-change-review.jar "dist/terraform-change-review-${GITHUB_REF_NAME#v}.jar"
           cd dist
           sha256sum "terraform-change-review-${GITHUB_REF_NAME#v}.jar" > SHA256SUMS
           sha256sum --check SHA256SUMS

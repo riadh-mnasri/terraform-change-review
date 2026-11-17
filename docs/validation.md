@@ -1,8 +1,20 @@
 # Local validation
 
+## Kotlin/Gradle migration
+
 Validated with OpenJDK 17.0.19 on macOS, 2026-11-17.
 
-- `./mvnw --batch-mode --no-transfer-progress clean verify`: 37 tests passed, zero failures/errors/skips, with Maven 3.9.9. The wrapper checksum check explicitly reads stdin for compatibility with macOS and GNU `sha256sum`.
+- `./gradlew --no-daemon clean build`: successful, including all 37 existing tests.
+- Repeated `./gradlew --no-daemon clean build` after configuring the Maven Central publication: successful. `./gradlew --no-daemon dokkaJavadocJar` also succeeded; the resulting Javadoc archive contains API pages for the Kotlin production types. The test task was served from Gradle's cache on this repeat build.
+- Packaged CLI smoke review of `examples/gcp-risky.json`: successful; produced four HIGH and two MEDIUM findings, as expected.
+- Production sources compile from Kotlin; existing Java tests remain unchanged to verify JVM API compatibility.
+- GitHub Actions CI is configured to repeat the build on Java 17 and 21 after the migration PR is opened.
+
+## Original Maven validation
+
+Validated with OpenJDK 17.0.19 on macOS, 2026-11-17.
+
+- Before the Kotlin/Gradle migration, `./mvnw --batch-mode --no-transfer-progress clean verify` passed 37 tests with zero failures/errors/skips on Maven 3.9.9. The wrapper checksum check explicitly reads stdin for compatibility with macOS and GNU `sha256sum`.
 - Engine checks: destructive changes, both replacement orderings, unknown ancestors and nested values, IAM additions/removals, active ingress filtering, protection toggles, output inventory, incomplete plans and unsupported input.
 - Data boundaries: nested/ancestor/before sensitivity masks, suppression of unrelated values and parser excerpts, path traversal/symlink rejection, oversized input rejection and Markdown escaping.
 - Official MCP SDK client initialized a real subprocess, discovered both tools, reviewed a fixture, rejected an escaping path and received a sanitized malformed-input error.
