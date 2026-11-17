@@ -12,6 +12,22 @@ A Terraform plan tells you what will change. Reviewers still need to determine w
 
 This project turns a local plan into a deterministic, structured review. Each finding contains a rule ID, resource, severity, evidence and a next check. Claude can explain those findings; the checks also run without an LLM in CI.
 
+```mermaid
+flowchart LR
+    A[Terraform saved plan] -->|terraform show -json| B[Local JSON plan]
+    B --> C[Bounded reader and validator]
+    C --> D[Deterministic review engine]
+    D --> E[CLI JSON or Markdown]
+    D --> F[Read-only MCP tools]
+    F --> G[Claude Code explanation]
+    E --> H[Human review or CI policy]
+    G --> H
+```
+
+The engine analyzes local plan evidence. Cloud state and effective access are not queried, and the MCP tools cannot apply infrastructure changes.
+
+Browse the [documentation wiki source](docs/wiki/Home.md) for guided entry points. The pages are reviewed through pull requests before publication to the GitHub Wiki.
+
 ## Quick start
 
 Requirements: Java 17+. Download the JAR and checksum manifest from [v0.1.0](https://github.com/riadh-mnasri/terraform-change-review/releases/tag/v0.1.0):
@@ -54,6 +70,19 @@ Exit codes: `0` review completed without reaching the selected severity threshol
 ## Read a review
 
 Start with `findings`: each entry names the rule and resource, shows selected before/after evidence, and suggests a next check. Then inspect `checks`, unknown paths and plan completeness to see what could not be evaluated.
+
+```mermaid
+flowchart TD
+    A[Review a JSON plan] --> B{Valid input?}
+    B -->|No| C[CLI exit 2 or MCP tool error]
+    B -->|Yes| D[Inspect findings and evidence]
+    D --> E[Inspect skipped checks and unsupported items]
+    E --> F[Inspect unknown values and plan completeness]
+    F --> G[Resolve review questions and apply team policy]
+    G --> H[Separate infrastructure approval process]
+```
+
+CLI exit 0 means the selected finding threshold was not reached. Unknowns, skipped checks and incomplete plans need separate policy decisions.
 
 For example, removing an IAM condition for a retained principal and role produces `GCP-IAM-CONDITION-REMOVED`. If Terraform also plans to replace that resource, the review includes `TF-REPLACE`. Adding a condition back can remove the IAM finding while still requiring a replacement review.
 
