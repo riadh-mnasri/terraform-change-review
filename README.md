@@ -69,6 +69,8 @@ See the [report contract](docs/report-format.md) for automation and the [sample 
 
 ## Claude Code
 
+See the [step-by-step Claude Code guide](docs/claude-code.md) for a synthetic fixture walkthrough, report comparison, isolated smoke test and troubleshooting. MCP connection and SDK tool execution are verified; the model-backed conversation test remains incomplete because the latest attempt stopped on an account credit error before any tool call.
+
 Register the downloaded JAR (or use the built target JAR). Replace both absolute paths:
 
 ```sh
