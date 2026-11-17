@@ -1,14 +1,15 @@
 package dev.planreview;
 
+import static dev.planreview.JsonSupport.*;
 import static dev.planreview.Review.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
-import com.fasterxml.jackson.databind.node.TextNode;
 import java.util.*;
 
-/** Deterministic rules. No network, cloud credentials, shell execution or LLM dependency. */
+/** Deterministic analysis. Each rule evaluation produces an explicit coverage outcome. */
 public final class ReviewEngine {
+  public static final List<RuleCatalog.Rule> RULES = RuleCatalog.ALL;
   private static final Set<String> ELEVATED =
       Set.of(
           "roles/owner",
@@ -17,176 +18,90 @@ public final class ReviewEngine {
           "roles/resourcemanager.projectIamAdmin",
           "roles/iam.serviceAccountTokenCreator",
           "roles/iam.serviceAccountUser");
-  private static final Set<String> TYPES =
-      Set.of(
-          "google_compute_firewall",
-          "google_project_iam_member",
-          "google_project_iam_binding",
-          "google_storage_bucket_iam_member",
-          "google_storage_bucket_iam_binding",
-          "google_storage_bucket",
-          "google_container_node_pool",
-          "google_sql_database_instance");
-
-  public record Rule(String id, String severity, String description) {}
-
-  public static final List<Rule> RULES =
-      List.of(
-          new Rule(
-              "TF-DELETE",
-              "HIGH",
-              "Managed resource deletion; impact needs resource-specific review"),
-          new Rule(
-              "TF-REPLACE", "HIGH", "Managed resource replacement; continuity needs verification"),
-          new Rule(
-              "GCP-IAM-ELEVATED",
-              "HIGH",
-              "New principal-role assignment for a curated sensitive role"),
-          new Rule("GCP-IAM-PUBLIC", "HIGH", "New allUsers/allAuthenticatedUsers assignment"),
-          new Rule(
-              "GCP-FIREWALL-WORLD",
-              "HIGH",
-              "Changed active ingress allow rule has a world source range"),
-          new Rule("GCP-BUCKET-DESTROY", "HIGH", "force_destroy is enabled"),
-          new Rule("GCP-BUCKET-ACCESS", "MEDIUM", "Uniform bucket-level access is disabled"),
-          new Rule("GCP-GKE-AUTOREPAIR", "MEDIUM", "Node auto-repair is disabled"),
-          new Rule("GCP-SQL-BACKUP", "HIGH", "Automated database backups are disabled"));
 
   public Review review(JsonNode plan) {
-    validate(plan);
-    List<Change> changes = new ArrayList<>();
-    List<Finding> findings = new ArrayList<>();
-    for (JsonNode resource : plan.path("resource_changes")) {
-      JsonNode c = resource.path("change");
+    PlanValidator.validate(plan);
+    var changes = new ArrayList<Change>();
+    var findings = new ArrayList<Finding>();
+    var checks = new ArrayList<Check>();
+    for (JsonNode r : plan.path("resource_changes")) {
+      JsonNode c = r.path("change");
       List<String> actions = strings(c.path("actions"));
-      if (actions.equals(List.of("no-op"))
-          && !c.has("importing")
-          && !resource.has("previous_address")) continue;
-      String address = resource.path("address").asText();
-      String type = resource.path("type").asText();
-      var paths = new TreeSet<String>();
-      diff(c.path("before"), c.path("after"), "", paths);
-      var unknown = new TreeSet<String>();
-      marked(c.path("after_unknown"), "", unknown);
-      boolean managed = resource.path("mode").asText("managed").equals("managed");
-      String coverage = managed && TYPES.contains(type) ? "partial-specialized" : "inventory-only";
+      if (actions.equals(List.of("no-op")) && !c.has("importing") && !r.has("previous_address"))
+        continue;
+      String address = r.path("address").asText(), type = r.path("type").asText();
+      boolean managed = r.path("mode").asText("managed").equals("managed");
+      boolean specialized =
+          managed && RULES.stream().anyMatch(rule -> rule.resourceTypes().contains(type));
       changes.add(
-          new Change(
+          inventory(
               address,
               type,
-              actions,
-              List.copyOf(paths),
-              List.copyOf(unknown),
-              coverage,
-              resource.path("previous_address").asText(null),
+              c,
+              specialized ? "partial-specialized" : "inventory-only",
+              r.path("previous_address").asText(null),
               c.has("importing")));
-      if (!managed) continue;
-      if (actions.contains("delete")) {
-        boolean replace = actions.contains("create");
-        findings.add(
-            new Finding(
-                replace ? "TF-REPLACE" : "TF-DELETE",
-                "HIGH",
+      if (!specialized)
+        checks.add(
+            new Check(
                 address,
-                replace ? "Resource will be replaced" : "Resource will be deleted",
-                "Continuity and data preservation must be checked; downtime or data loss is not"
-                    + " established by the plan alone.",
-                List.of(),
-                "Verify backups, dependency ordering, recovery procedure and maintenance"
-                    + " requirements."));
+                "SPECIALIZED",
+                "NOT_SUPPORTED",
+                managed ? "RESOURCE_TYPE_NOT_SUPPORTED" : "DATA_RESOURCE"));
+      for (var rule : RULES) {
+        if (!rule.resourceTypes().isEmpty() && !rule.resourceTypes().contains(type)) continue;
+        String reason = skipReason(r, rule);
+        checks.add(
+            new Check(
+                address,
+                rule.id(),
+                reason == null ? "EXECUTED" : "SKIPPED",
+                reason == null ? "EVALUATED" : reason));
+        if (reason == null) evaluate(r, rule, findings);
       }
-      if (!actions.contains("create") && !actions.contains("update")) continue;
-      if (type.endsWith("_iam_member") || type.endsWith("_iam_binding")) iam(resource, findings);
-      if (type.equals("google_compute_firewall")) firewall(resource, findings);
-      if (type.equals("google_storage_bucket")) {
-        transition(
-            resource,
-            findings,
-            "GCP-BUCKET-DESTROY",
-            "HIGH",
-            "/force_destroy",
-            true,
-            "Bucket force_destroy enabled",
-            "Deleting this bucket may also delete its objects.");
-        transition(
-            resource,
-            findings,
-            "GCP-BUCKET-ACCESS",
-            "MEDIUM",
-            "/uniform_bucket_level_access",
-            false,
-            "Uniform bucket-level access disabled",
-            "Review object ACLs and IAM together to understand effective access.");
-      }
-      if (type.equals("google_container_node_pool"))
-        transition(
-            resource,
-            findings,
-            "GCP-GKE-AUTOREPAIR",
-            "MEDIUM",
-            "/management/0/auto_repair",
-            false,
-            "Node auto-repair disabled",
-            "Automatic remediation of unhealthy nodes is reduced.");
-      if (type.equals("google_sql_database_instance"))
-        transition(
-            resource,
-            findings,
-            "GCP-SQL-BACKUP",
-            "HIGH",
-            "/settings/0/backup_configuration/0/enabled",
-            false,
-            "Automated SQL backups disabled",
-            "Recovery options may be reduced; verify alternate backup arrangements.");
     }
     plan.path("output_changes")
         .fields()
         .forEachRemaining(
-            entry -> {
-              JsonNode c = entry.getValue();
-              List<String> actions = strings(c.path("actions"));
-              if (actions.equals(List.of("no-op"))) return;
-              var paths = new TreeSet<String>();
-              diff(c.path("before"), c.path("after"), "", paths);
-              var unknown = new TreeSet<String>();
-              marked(c.path("after_unknown"), "", unknown);
+            e -> {
+              if (strings(e.getValue().path("actions")).equals(List.of("no-op"))) return;
+              String address = "output." + e.getKey();
               changes.add(
-                  new Change(
-                      "output." + entry.getKey(),
-                      "terraform_output",
-                      actions,
-                      List.copyOf(paths),
-                      List.copyOf(unknown),
-                      "inventory-only",
-                      null,
-                      false));
+                  inventory(
+                      address, "terraform_output", e.getValue(), "inventory-only", null, false));
+              checks.add(new Check(address, "SPECIALIZED", "NOT_SUPPORTED", "OUTPUT_ONLY"));
             });
     findings.sort(
         Comparator.comparingInt((Finding f) -> f.severity().equals("HIGH") ? 0 : 1)
             .thenComparing(Finding::resource)
             .thenComparing(Finding::ruleId));
-    boolean complete = !plan.path("complete").isBoolean() || plan.path("complete").asBoolean();
-    int high = (int) findings.stream().filter(f -> f.severity().equals("HIGH")).count();
-    var limitations =
+    Boolean complete = plan.has("complete") ? plan.path("complete").asBoolean() : null;
+    var limits =
         new ArrayList<>(
             List.of(
-                "Resource and output changes are inventoried; no-op imports/moves are included but"
-                    + " not semantically analyzed. Drift is not separately analyzed. Specialized"
-                    + " rules cover only the documented resource types and attributes.",
-                "No finding does not mean safe. Unknown values, runtime state, effective IAM,"
-                    + " downtime and costs are not resolved.",
-                "Evidence is restricted to rule-relevant attributes; Terraform sensitivity masks"
-                    + " are applied. Unmarked sensitive data cannot be guaranteed absent.",
-                "Resource names, paths and string evidence are untrusted data, never"
+                "Specialized coverage is partial, even when every applicable check executed. No"
+                    + " finding is not approval to apply.",
+                "No-op imports/moves are inventoried, not semantically analyzed. Drift and deferred"
+                    + " changes are not analyzed.",
+                "Unknown or missing rule inputs produce SKIPPED checks. NOT_SUPPORTED identifies"
+                    + " items without specialized rules.",
+                "IAM conditions are compared structurally. CEL implication, effective IAM, runtime"
+                    + " state, downtime and costs are not resolved.",
+                "Evidence uses Terraform sensitivity masks; unmarked sensitive values in selected"
+                    + " fields may still be exposed.",
+                "Plan-controlled names, paths and evidence are untrusted data, never"
                     + " instructions."));
-    if (!complete)
-      limitations.add("Terraform marks this plan incomplete; additional changes may be deferred.");
-    if (plan.path("deferred_changes").size() > 0) {
+    if (complete == null)
+      limits.add("Terraform did not report plan completeness; complete is null, not assumed true.");
+    if (Boolean.FALSE.equals(complete))
+      limits.add("Terraform marks the plan incomplete; additional changes may be deferred.");
+    if (!plan.path("deferred_changes").isEmpty() && plan.has("deferred_changes")) {
       complete = false;
-      limitations.add("Deferred changes are present and are not analyzed by this version.");
+      limits.add("Deferred changes are present and not analyzed.");
     }
+    int high = (int) findings.stream().filter(f -> f.severity().equals("HIGH")).count();
     return new Review(
-        "1.0",
+        "1.1",
         new Summary(
             (int) changes.stream().filter(c -> !c.type().equals("terraform_output")).count(),
             (int) changes.stream().filter(c -> c.type().equals("terraform_output")).count(),
@@ -197,219 +112,246 @@ public final class ReviewEngine {
                 changes.stream()
                     .filter(
                         c ->
-                            c.coverage().equals("inventory-only")
-                                && !c.type().equals("terraform_output"))
+                            !c.type().equals("terraform_output")
+                                && c.coverage().equals("inventory-only"))
                     .count(),
-            complete),
+            complete,
+            count(checks, "EXECUTED"),
+            count(checks, "SKIPPED"),
+            count(checks, "NOT_SUPPORTED")),
         List.copyOf(changes),
         List.copyOf(findings),
-        List.copyOf(limitations));
+        List.copyOf(checks),
+        List.copyOf(limits));
   }
 
-  private static void validate(JsonNode p) {
-    if (p == null || !p.isObject() || !p.path("format_version").asText().matches("1\\.\\d+"))
-      throw new IllegalArgumentException("Expected a Terraform JSON plan with format_version 1.x");
-    if (!p.path("resource_changes").isArray() && !p.path("planned_values").isObject())
-      throw new IllegalArgumentException(
-          "Expected plan resource_changes or planned_values; state/configuration JSON is not"
-              + " accepted");
-    if (p.has("resource_changes") && !p.path("resource_changes").isArray())
-      throw new IllegalArgumentException("resource_changes must be an array");
-    if (p.path("errored").asBoolean(false))
-      throw new IllegalArgumentException("Cannot review an errored Terraform plan");
-    for (JsonNode r : p.path("resource_changes")) {
-      if (!r.path("address").isTextual()
-          || !r.path("type").isTextual()
-          || !r.path("change").path("actions").isArray())
-        throw new IllegalArgumentException("Malformed resource change");
-      List<String> a = strings(r.path("change").path("actions"));
-      if (!Set.of(
-              List.of("no-op"),
-              List.of("create"),
-              List.of("read"),
-              List.of("update"),
-              List.of("delete"),
-              List.of("delete", "create"),
-              List.of("create", "delete"),
-              List.of("forget"),
-              List.of("create", "forget"))
-          .contains(a))
-        throw new IllegalArgumentException("Unsupported Terraform action combination");
+  private static int count(List<Check> checks, String status) {
+    return (int) checks.stream().filter(c -> c.status().equals(status)).count();
+  }
+
+  private static Change inventory(
+      String address,
+      String type,
+      JsonNode c,
+      String coverage,
+      String previous,
+      boolean importing) {
+    var paths = new TreeSet<String>();
+    diff(c.path("before"), c.path("after"), "", paths);
+    var unknown = new TreeSet<String>();
+    marked(c.path("after_unknown"), "", unknown);
+    return new Change(
+        address,
+        type,
+        strings(c.path("actions")),
+        List.copyOf(paths),
+        List.copyOf(unknown),
+        coverage,
+        previous,
+        importing);
+  }
+
+  private static String skipReason(JsonNode r, RuleCatalog.Rule rule) {
+    if (!r.path("mode").asText("managed").equals("managed")) return "DATA_RESOURCE";
+    JsonNode c = r.path("change"), after = c.path("after");
+    List<String> actions = strings(c.path("actions"));
+    if (rule.resourceTypes().isEmpty()) return null; // Generic checks inspect action semantics.
+    if (!actions.contains("create") && !actions.contains("update")) return "ACTION_NOT_APPLICABLE";
+    for (String p : rule.inputs()) if (uncertain(c, p)) return "UNKNOWN_VALUE";
+    if (RuleCatalog.IAM.contains(r.path("type").asText())) {
+      String member = r.path("type").asText().endsWith("_binding") ? "/members" : "/member";
+      if (uncertain(c, member)) return "UNKNOWN_VALUE";
+      if (!after.path("role").isTextual()
+          || after.at(member).isMissingNode()
+          || after.at(member).isNull()) return "MISSING_ATTRIBUTE";
+      if (!(member.equals("/members") ? textArray(after.at(member)) : after.at(member).isTextual()))
+        return "INVALID_ATTRIBUTE_TYPE";
+      if (rule.id().contains("CONDITION")) {
+        if (!conditionValid(c.path("before").path("condition"))
+            || !conditionValid(after.path("condition"))) return "INVALID_ATTRIBUTE_TYPE";
+      }
+      return null;
+    }
+    if (rule.id().equals("GCP-FIREWALL-WORLD")) {
+      if (!after.hasNonNull("source_ranges") || !after.hasNonNull("allow"))
+        return "MISSING_ATTRIBUTE";
+      if (!textArray(after.path("source_ranges")) || !after.path("allow").isArray())
+        return "INVALID_ATTRIBUTE_TYPE";
+      if (after.hasNonNull("direction") && !after.path("direction").isTextual()
+          || after.hasNonNull("disabled") && !after.path("disabled").isBoolean())
+        return "INVALID_ATTRIBUTE_TYPE";
+      return null;
+    }
+    JsonNode input = after.at(rule.inputs().get(0));
+    if (input.isMissingNode() || input.isNull()) return "MISSING_ATTRIBUTE";
+    return input.isBoolean() ? null : "INVALID_ATTRIBUTE_TYPE";
+  }
+
+  private static boolean textArray(JsonNode n) {
+    if (!n.isArray()) return false;
+    for (JsonNode v : n) if (!v.isTextual()) return false;
+    return true;
+  }
+
+  private static boolean conditionValid(JsonNode n) {
+    return n.isMissingNode()
+        || n.isNull()
+        || n.isArray()
+            && (n.isEmpty()
+                || n.size() == 1 && n.get(0).isObject() && n.get(0).path("expression").isTextual());
+  }
+
+  private static void evaluate(JsonNode r, RuleCatalog.Rule rule, List<Finding> out) {
+    JsonNode c = r.path("change");
+    List<String> actions = strings(c.path("actions"));
+    switch (rule.id()) {
+      case "TF-DELETE", "TF-REPLACE" -> {
+        boolean replacement = actions.contains("create") && actions.contains("delete");
+        if (actions.contains("delete") && replacement == rule.id().equals("TF-REPLACE"))
+          add(
+              out,
+              r,
+              rule,
+              replacement ? "Resource replacement planned" : "Resource removal planned",
+              "Continuity and data preservation require review; the plan alone does not prove"
+                  + " downtime or data loss. Provider abandonment semantics may affect removal.",
+              List.of(new Evidence("/change/actions", NullNode.instance, c.path("actions"))),
+              "Check provider deletion behavior, lifecycle ordering, backups and recovery"
+                  + " procedures.");
+      }
+      case "GCP-IAM-ELEVATED", "GCP-IAM-PUBLIC" -> assignment(r, rule, out);
+      case "GCP-IAM-CONDITION-REMOVED", "GCP-IAM-CONDITION-CHANGED" -> condition(r, rule, out);
+      case "GCP-FIREWALL-WORLD" -> firewall(r, rule, out);
+      case "GCP-BUCKET-DESTROY" ->
+          transition(
+              r,
+              rule,
+              out,
+              true,
+              "Deleting this bucket may also delete its objects; this flag alone does not schedule"
+                  + " deletion.");
+      case "GCP-BUCKET-ACCESS" ->
+          transition(
+              r,
+              rule,
+              out,
+              false,
+              "Review object ACLs and IAM together to understand effective access.");
+      case "GCP-GKE-AUTOREPAIR" ->
+          transition(r, rule, out, false, "Automatic remediation of unhealthy nodes is reduced.");
+      case "GCP-SQL-BACKUP" ->
+          transition(
+              r, rule, out, false, "Recovery options may be reduced; verify alternate backups.");
+      default -> throw new IllegalStateException("Unimplemented registered rule");
     }
   }
 
-  private static void iam(JsonNode r, List<Finding> out) {
-    if (!TYPES.contains(r.path("type").asText())) return;
-    JsonNode c = r.path("change"), after = c.path("after"), before = c.path("before");
-    if (uncertain(c, "/role") || uncertain(c, "/member") || uncertain(c, "/members")) return;
-    String role = after.path("role").asText();
-    Set<String> members = principals(after), old = principals(before);
-    if (role.equals(before.path("role").asText())) members.removeAll(old);
-    if (members.isEmpty()) return;
-    String memberPath = r.path("type").asText().endsWith("_binding") ? "/members" : "/member";
-    var evidence = List.of(evidence(c, "/role"), evidence(c, memberPath));
-    if (ELEVATED.contains(role))
-      out.add(
-          new Finding(
-              "GCP-IAM-ELEVATED",
-              "HIGH",
-              r.path("address").asText(),
-              "Sensitive role assignment added",
-              "A new principal-role assignment is planned; conditions and effective access require"
-                  + " further review.",
-              evidence,
-              "Confirm the required permissions, scope, conditions and identity trust"
-                  + " relationships."));
-    if (members.contains("allUsers") || members.contains("allAuthenticatedUsers"))
-      out.add(
-          new Finding(
-              "GCP-IAM-PUBLIC",
-              "HIGH",
-              r.path("address").asText(),
-              "Public principal assignment added",
-              "Access is assigned to a broad public principal; effective exposure depends on the"
-                  + " role and other controls.",
-              evidence,
-              "Verify whether public access is intentional and permitted by organization policy."));
+  private static void assignment(JsonNode r, RuleCatalog.Rule rule, List<Finding> out) {
+    JsonNode c = r.path("change"), a = c.path("after"), b = c.path("before");
+    Set<String> added = principals(a);
+    if (a.path("role").equals(b.path("role"))) added.removeAll(principals(b));
+    boolean match =
+        rule.id().equals("GCP-IAM-ELEVATED")
+            ? ELEVATED.contains(a.path("role").asText())
+            : added.contains("allUsers") || added.contains("allAuthenticatedUsers");
+    if (!added.isEmpty() && match)
+      add(
+          out,
+          r,
+          rule,
+          rule.description(),
+          "A new principal-role assignment is planned. Conditions, scope and other controls affect"
+              + " effective access.",
+          List.of(evidence(c, "/role"), evidence(c, memberPath(r))),
+          "Confirm required permissions, identity trust, conditions and organization policy.");
   }
 
   private static Set<String> principals(JsonNode n) {
-    var result = new HashSet<String>(strings(n.path("members")));
+    var result = new HashSet<>(strings(n.path("members")));
     if (n.path("member").isTextual()) result.add(n.path("member").asText());
     return result;
   }
 
-  private static void firewall(JsonNode r, List<Finding> out) {
+  private static String memberPath(JsonNode r) {
+    return r.path("type").asText().endsWith("_binding") ? "/members" : "/member";
+  }
+
+  private static String expression(JsonNode n) {
+    return n.isArray() && !n.isEmpty() ? n.get(0).path("expression").asText() : null;
+  }
+
+  private static void condition(JsonNode r, RuleCatalog.Rule rule, List<Finding> out) {
+    JsonNode c = r.path("change"), b = c.path("before"), a = c.path("after");
+    if (!a.path("role").equals(b.path("role"))) return;
+    var common = principals(a);
+    common.retainAll(principals(b));
+    if (common.isEmpty()) return;
+    String before = expression(b.path("condition")), after = expression(a.path("condition"));
+    boolean removed = before != null && after == null;
+    boolean changed = before != null && after != null && !before.equals(after);
+    if (!(rule.id().endsWith("REMOVED") ? removed : changed)) return;
+    add(
+        out,
+        r,
+        rule,
+        rule.description(),
+        removed
+            ? "An existing principal-role pair loses its conditional restriction. Other IAM and"
+                + " organization controls may still constrain access."
+            : "The CEL expression changed. This tool does not establish whether access widened or"
+                + " narrowed.",
+        List.of(evidence(c, "/role"), evidence(c, memberPath(r)), evidence(c, "/condition")),
+        "Review the CEL expression and affected principals; validate intended positive and negative"
+            + " access cases.");
+  }
+
+  private static void firewall(JsonNode r, RuleCatalog.Rule rule, List<Finding> out) {
     JsonNode c = r.path("change"), a = c.path("after");
-    for (String path : List.of("/source_ranges", "/allow", "/direction", "/disabled"))
-      if (uncertain(c, path)) return;
     if (a.path("disabled").asBoolean(false)
         || !a.path("direction").asText("INGRESS").equals("INGRESS")) return;
     boolean world =
         strings(a.path("source_ranges")).stream()
             .anyMatch(s -> s.equals("0.0.0.0/0") || s.equals("::/0"));
-    var relevant =
-        List.of(
-            "/source_ranges",
-            "/allow",
-            "/direction",
-            "/disabled",
-            "/target_tags",
-            "/target_service_accounts",
-            "/priority");
-    boolean changed = relevant.stream().anyMatch(p -> !c.path("before").at(p).equals(a.at(p)));
-    if (world && a.path("allow").isArray() && !a.path("allow").isEmpty() && changed)
-      out.add(
-          new Finding(
-              "GCP-FIREWALL-WORLD",
-              "HIGH",
-              r.path("address").asText(),
-              "Changed ingress allow rule includes a world source range",
-              "The rule allows ingress from an unrestricted source range. Reachability also depends"
-                  + " on targets, routes and other policies.",
-              relevant.stream().map(p -> evidence(c, p)).toList(),
-              "Verify intended ports, target scope, external reachability and higher-priority"
-                  + " policies."));
+    boolean changed = rule.inputs().stream().anyMatch(p -> !c.path("before").at(p).equals(a.at(p)));
+    if (world && !a.path("allow").isEmpty() && changed)
+      add(
+          out,
+          r,
+          rule,
+          rule.description(),
+          "An unrestricted source is allowed. Reachability depends on targets, routes and other"
+              + " firewall policies.",
+          rule.inputs().stream().map(p -> evidence(c, p)).toList(),
+          "Verify intended ports, target scope, external reachability and higher-priority"
+              + " policies.");
   }
 
   private static void transition(
-      JsonNode r,
+      JsonNode r, RuleCatalog.Rule rule, List<Finding> out, boolean risk, String impact) {
+    JsonNode c = r.path("change");
+    String path = rule.inputs().get(0);
+    JsonNode after = c.path("after").at(path);
+    if (after.asBoolean() == risk && !after.equals(c.path("before").at(path)))
+      add(
+          out,
+          r,
+          rule,
+          rule.description(),
+          impact,
+          List.of(evidence(c, path)),
+          "Confirm intent and compensating controls before applying.");
+  }
+
+  private static void add(
       List<Finding> out,
-      String id,
-      String severity,
-      String path,
-      boolean risk,
+      JsonNode r,
+      RuleCatalog.Rule rule,
       String title,
-      String impact) {
-    JsonNode c = r.path("change"), after = c.path("after").at(path);
-    if (uncertain(c, path)
-        || !after.isBoolean()
-        || after.asBoolean() != risk
-        || after.equals(c.path("before").at(path))) return;
+      String impact,
+      List<Evidence> evidence,
+      String next) {
     out.add(
         new Finding(
-            id,
-            severity,
-            r.path("address").asText(),
-            title,
-            impact,
-            List.of(evidence(c, path)),
-            "Confirm intent and compensating controls before applying."));
-  }
-
-  private static Evidence evidence(JsonNode c, String path) {
-    return new Evidence(
-        path,
-        safe(c.path("before"), c.path("before_sensitive"), path),
-        safe(c.path("after"), c.path("after_sensitive"), path));
-  }
-
-  private static JsonNode safe(JsonNode data, JsonNode mask, String path) {
-    String p = path;
-    while (true) {
-      if (mask.at(p).isBoolean() && mask.at(p).asBoolean()) return TextNode.valueOf("[REDACTED]");
-      if (p.isEmpty()) break;
-      p = p.substring(0, p.lastIndexOf('/'));
-    }
-    return redact(data.at(path), mask.at(path));
-  }
-
-  private static JsonNode redact(JsonNode value, JsonNode mask) {
-    if (mask.isBoolean() && mask.asBoolean()) return TextNode.valueOf("[REDACTED]");
-    if (value.isMissingNode()) return NullNode.instance;
-    if (value.isObject()) {
-      var copy = PlanReader.JSON.createObjectNode();
-      value
-          .fields()
-          .forEachRemaining(e -> copy.set(e.getKey(), redact(e.getValue(), mask.path(e.getKey()))));
-      return copy;
-    }
-    if (value.isArray()) {
-      var copy = PlanReader.JSON.createArrayNode();
-      for (int i = 0; i < value.size(); i++) copy.add(redact(value.get(i), mask.path(i)));
-      return copy;
-    }
-    return value;
-  }
-
-  private static boolean uncertain(JsonNode c, String path) {
-    JsonNode mask = c.path("after_unknown");
-    String p = path;
-    while (true) {
-      if (mask.at(p).isBoolean() && mask.at(p).asBoolean()) return true;
-      if (p.isEmpty()) break;
-      p = p.substring(0, p.lastIndexOf('/'));
-    }
-    var marks = new TreeSet<String>();
-    marked(mask.at(path), "", marks);
-    return !marks.isEmpty();
-  }
-
-  private static String pointer(String key) {
-    return key.replace("~", "~0").replace("/", "~1");
-  }
-
-  private static void diff(JsonNode before, JsonNode after, String path, Set<String> out) {
-    if (before.equals(after)) return;
-    if (before.isObject() || after.isObject()) {
-      Set<String> keys = new TreeSet<>();
-      before.fieldNames().forEachRemaining(keys::add);
-      after.fieldNames().forEachRemaining(keys::add);
-      keys.forEach(k -> diff(before.path(k), after.path(k), path + "/" + pointer(k), out));
-    } else out.add(path.isEmpty() ? "/" : path);
-  }
-
-  private static void marked(JsonNode n, String path, Set<String> out) {
-    if (n.isBoolean() && n.asBoolean()) out.add(path.isEmpty() ? "/" : path);
-    else if (n.isObject())
-      n.fields().forEachRemaining(e -> marked(e.getValue(), path + "/" + pointer(e.getKey()), out));
-    else if (n.isArray()) for (int i = 0; i < n.size(); i++) marked(n.get(i), path + "/" + i, out);
-  }
-
-  private static List<String> strings(JsonNode n) {
-    if (!n.isArray()) return List.of();
-    var result = new ArrayList<String>();
-    n.forEach(v -> result.add(v.asText()));
-    return result;
+            rule.id(), rule.severity(), r.path("address").asText(), title, impact, evidence, next));
   }
 }

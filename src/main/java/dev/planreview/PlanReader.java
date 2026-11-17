@@ -10,7 +10,9 @@ import java.nio.file.Path;
 /** Local input only. Resolve symlinks before enforcing the configured workspace boundary. */
 public final class PlanReader {
   public static final int MAX_BYTES = 20 * 1024 * 1024;
-  public static final ObjectMapper JSON = new ObjectMapper();
+  public static final ObjectMapper JSON =
+      new ObjectMapper()
+          .enable(com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
   private final Path root;
 
   public PlanReader(Path root) throws IOException {

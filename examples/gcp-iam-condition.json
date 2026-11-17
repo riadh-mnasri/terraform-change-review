@@ -1,0 +1,32 @@
+{
+  "format_version": "1.2",
+  "complete": true,
+  "resource_changes": [
+    {
+      "address": "google_project_iam_member.temporary",
+      "mode": "managed",
+      "type": "google_project_iam_member",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "role": "roles/viewer",
+          "member": "user:reviewer@example.test",
+          "condition": [
+            {
+              "title": "temporary",
+              "expression": "request.time < timestamp(\"2027-01-01T00:00:00Z\")"
+            }
+          ]
+        },
+        "after": {
+          "role": "roles/viewer",
+          "member": "user:reviewer@example.test",
+          "condition": []
+        },
+        "after_unknown": {}
+      }
+    }
+  ]
+}

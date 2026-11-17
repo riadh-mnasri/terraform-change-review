@@ -14,6 +14,9 @@ public final class Main {
   public static void main(String[] args) {
     try {
       System.exit(run(args));
+    } catch (PlanValidator.InvalidPlan e) {
+      System.err.println("Invalid Terraform plan: " + e.code());
+      System.exit(2);
     } catch (Exception e) {
       // JSON parse errors can contain excerpts of sensitive input. Never print exception messages.
       System.err.println(
@@ -117,6 +120,11 @@ public final class Main {
                             || !(arguments.get("path") instanceof String path)
                             || path.isBlank()) return error();
                         return result(new ReviewEngine().review(reader.read(path)));
+                      } catch (PlanValidator.InvalidPlan e) {
+                        return McpSchema.CallToolResult.builder()
+                            .addTextContent("Invalid Terraform plan: " + e.code())
+                            .isError(true)
+                            .build();
                       } catch (Exception e) {
                         return error();
                       }

@@ -17,6 +17,6 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.java }}
           cache: maven
-      - run: mvn --batch-mode --no-transfer-progress clean verify
+      - run: ./mvnw --batch-mode --no-transfer-progress clean verify
       - name: Packaged CLI smoke test
         run: java -jar target/terraform-change-review.jar review examples/gcp-risky.json --format markdown --fail-on none

@@ -2,7 +2,7 @@
 
 ## Separate analysis from presentation
 
-`PlanReader` loads bounded, local JSON. `ReviewEngine` applies deterministic checks and builds immutable report records. `Main` exposes that engine via a CLI and the official Java MCP SDK over stdio. `Markdown` renders reports for human review.
+`PlanReader` loads bounded, local JSON and rejects duplicate keys. `PlanValidator` validates structure, types, actions and value masks. `ReviewEngine` applies deterministic checks and builds immutable report records. `Main` exposes that engine via a CLI and the official Java MCP SDK over stdio. `Markdown` renders reports for human review.
 
 The analysis needs no cloud account or LLM. This makes examples reproducible, rules reviewable, and the same result usable in CI and a coding assistant.
 
@@ -20,14 +20,14 @@ This is data minimization, not a guarantee of secret discovery. Unmarked secrets
 
 ## Distinguish coverage from verdict
 
-`inventory-only` means no specialized semantic checks. `partial-specialized` means selected checks, never complete coverage. Every report states limitations. Unknown values skip dependent rules and remain visible in the inventory. The summary's `complete` reflects Terraform plan completeness and deferred changes, not analyzer coverage.
+`inventory-only` means no specialized semantic checks. `partial-specialized` means selected checks, never complete coverage. Every report states limitations. Unknown values skip dependent rules and remain visible in the inventory. Every applicable rule emits an EXECUTED/SKIPPED outcome with a stable reason code; NOT_SUPPORTED marks items without specialized checks. Missing Terraform completeness is reported as null. The summary's `complete` reflects Terraform plan completeness and deferred changes, not analyzer coverage.
 
 The first version has no universal risk score: explicit findings and their evidence are more useful than an unexplained number. HIGH means priority for human review, not confirmed exploitability, outage or data loss.
 
 ## Extend through rules, not prompts
 
-For now rules are code, with fixed IDs and regression tests. Future policy adapters should preserve evidence paths, unknown-value handling and redaction. Checkov/OPA integration should reuse their results rather than duplicate their catalogs. Runtime/cloud enrichment would be optional and independently permissioned.
+Rules have shared metadata in RuleCatalog (IDs, severity, scope and input paths), with deterministic evaluation code and regression tests. JsonSupport centralizes unknown markers, diff paths and redaction. Future policy adapters should preserve evidence paths, unknown-value handling and redaction. Checkov/OPA integration should reuse their results rather than duplicate their catalogs. Runtime/cloud enrichment would be optional and independently permissioned.
 
 ## Compatibility
 
-Java 17 baseline. MCP SDK 2.1.0's legacy client/server API is used for stdio compatibility. The integration suite spawns a real server process and exercises initialization, discovery, successful calls and path-boundary rejection with the official SDK client. Actual Claude Code account integration is a separate manual smoke test.
+Java 17 baseline. MCP SDK 2.1.0's legacy client/server API is used for stdio compatibility. The integration suite spawns a real server process and exercises initialization, discovery, successful calls and path-boundary rejection with the official SDK client. Claude Code connection and model-backed tool execution are tracked separately; see validation.md.

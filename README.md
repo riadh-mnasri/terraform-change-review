@@ -2,7 +2,9 @@
 
 Evidence-based Terraform plan review for Claude Code and CI. Built with Java 17 and the official MCP Java SDK.
 
-**Status: early MVP.** Inventories resource and output changes across providers; specialized checks currently target selected Google Cloud resources. It does not certify a plan as safe or predict an outage.
+[![Java verification](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml/badge.svg)](https://github.com/riadh-mnasri/terraform-change-review/actions/workflows/ci.yml)
+
+**Status: v0.1.0, early MVP.** Inventories resource and output changes across providers; specialized checks currently target selected Google Cloud resources. It does not certify a plan as safe or predict an outage.
 
 ## The problem
 
@@ -12,10 +14,21 @@ This project turns a local plan into a deterministic, structured review. Each fi
 
 ## Quick start
 
-Requirements: Java 17+ and Maven 3.9+. The build downloads dependencies from Maven Central; analysis itself makes no network calls.
+Requirements: Java 17+. Download the JAR and checksum manifest from [v0.1.0](https://github.com/riadh-mnasri/terraform-change-review/releases/tag/v0.1.0):
 
 ```sh
-mvn clean verify
+curl -fLO https://github.com/riadh-mnasri/terraform-change-review/releases/download/v0.1.0/terraform-change-review-0.1.0.jar
+curl -fLO https://github.com/riadh-mnasri/terraform-change-review/releases/download/v0.1.0/SHA256SUMS
+shasum -a 256 -c SHA256SUMS
+java -jar terraform-change-review-0.1.0.jar --help
+```
+
+On Linux, `sha256sum -c SHA256SUMS` is also supported. The manifest verifies integrity against the release assets; it is not a maintainer signature.
+
+Alternatively, clone the repository and build with the Maven Wrapper (Maven 3.9.9, Wrapper 3.3.2). Wrapper and distribution checksums are pinned. The initial build needs network access to Maven Central; analysis makes no network calls.
+
+```sh
+./mvnw clean verify
 java -jar target/terraform-change-review.jar review examples/gcp-risky.json --format markdown --fail-on none
 java -jar target/terraform-change-review.jar review examples/gcp-unknown.json
 java -jar target/terraform-change-review.jar rules
@@ -38,10 +51,10 @@ Exit codes: `0` review completed without reaching the selected severity threshol
 
 ## Claude Code
 
-After building, register the local stdio server. Replace both absolute paths:
+Register the downloaded JAR (or use the built target JAR). Replace both absolute paths:
 
 ```sh
-claude mcp add --transport stdio terraform-review -- java -jar /absolute/path/terraform-change-review/target/terraform-change-review.jar serve --root /absolute/path/infra-repository
+claude mcp add --scope local --transport stdio terraform-review -- java -jar /absolute/path/terraform-change-review-0.1.0.jar serve --root /absolute/path/infra-repository
 ```
 
 Tools:
@@ -61,17 +74,29 @@ The server uses the official SDK's legacy MCP transport for compatibility. It ha
 |---|---|
 | Generic managed resources | Deletions and both replacement orderings flagged for manual review |
 | Any provider / data resources / outputs | Action and changed-path inventory, unknown-path inventory |
-| Selected project/bucket IAM members and bindings | New public assignments and a documented curated set of sensitive roles |
+| Selected project/bucket IAM members and bindings | New public/sensitive role assignments, condition removal and condition expression changes |
 | Compute firewall | Changed active ingress allow rule with an explicit IPv4/IPv6 world source |
 | Storage bucket | Enabling force_destroy, disabling uniform bucket-level access |
 | GKE node pool | Disabling node auto-repair |
 | Cloud SQL | Disabling automated backups |
 
+Each review includes `checks` with a resource, rule ID, status and reason:
+
+| Status | Meaning |
+|---|---|
+| `EXECUTED` | The rule evaluated its supported inputs; it may or may not produce a finding |
+| `SKIPPED` | Applicable rule not evaluated: unknown/missing inputs, invalid attribute shape or non-applicable action |
+| `NOT_SUPPORTED` | The item has no specialized checks (generic action checks may still run) |
+
+Summary counters separate executed/skipped checks from items without specialized checks. `complete` is Terraform's plan completeness: `true`, `false`, or `null` when not reported. It does not describe analyzer coverage. Report schema version is `1.1`. See [report contract](docs/report-format.md).
+
+Malformed plan envelopes return exit 2 / an MCP tool error with a diagnostic code. Unknown minor fields are allowed; unsupported format major versions and action combinations are rejected.
+
 See [rules and limitations](docs/rules.md). Specialized coverage is partial even for supported types. Values unknown until apply are surfaced and affected checks are skipped. Existing risks untouched by relevant attributes are generally outside this change-focused review. No-op imports/moves are inventoried but not semantically analyzed. Drift is not separately analyzed. No live IAM evaluation, traffic simulation, cost estimation, runtime inspection or dependency impact guarantee.
 
 ## Data handling
 
-Terraform JSON can contain secrets in plaintext. Keep real plans out of version control. This repository contains synthetic fixtures only.
+Terraform JSON can contain secrets in plaintext. Keep real plans out of version control. All fixture data is synthetic: hand-written GCP cases and complete exports generated by Terraform using its built-in provider.
 
 The tool returns changed **paths**, not arbitrary resource values. Rule evidence is limited to relevant attributes and uses Terraform's before/after sensitivity masks, including nested and ancestor masks. It does not inspect variables, outputs' values or the full state for reporting. Unmarked sensitive values in selected evidence cannot be guaranteed absent; resource addresses and paths are also returned. Review your data policy before using a hosted AI client. Parse errors never echo input excerpts.
 
@@ -79,7 +104,7 @@ Input is limited to 20 MiB, format version 1.x, and a configured local root. Thi
 
 ## Architecture and roadmap
 
-`PlanReader → ReviewEngine → Review → CLI / MCP`
+`PlanReader → PlanValidator → ReviewEngine + RuleCatalog → Review → CLI / MCP`
 
 The engine has no SDK dependency in its API. Deterministic rules own facts and evidence; a consuming assistant owns the explanation. See [local validation](docs/validation.md), [sample review](docs/example-review.md), [architecture](docs/architecture.md), [contributing](CONTRIBUTING.md) and [security](SECURITY.md).
 

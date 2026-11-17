@@ -6,8 +6,10 @@ Rules are change-focused and deliberately narrow. HIGH means requires attention,
 |---|---|---|
 | TF-DELETE | Managed resource has delete without create | No data-loss or downtime inference |
 | TF-REPLACE | Managed resource actions contain delete and create, either order | Does not simulate lifecycle/dependency ordering |
-| GCP-IAM-ELEVATED | New principal-role assignment for a curated sensitive role | Project/bucket member and binding resources only; no effective-permission expansion or condition analysis |
+| GCP-IAM-ELEVATED | New principal-role assignment for a curated sensitive role | Project/bucket member and binding resources only; no effective-permission expansion or CEL evaluation |
 | GCP-IAM-PUBLIC | New allUsers/allAuthenticatedUsers assignment | Same types; role and organization controls affect actual exposure |
+| GCP-IAM-CONDITION-REMOVED | Existing principal-role pair retains access while a condition is removed | Other policies can still restrict access; only supported member/binding types |
+| GCP-IAM-CONDITION-CHANGED | Existing principal-role pair has a different CEL expression | MEDIUM; neither widening nor narrowing is inferred; title-only edits do not trigger |
 | GCP-FIREWALL-WORLD | Relevant fields change on active ingress allow rule with explicit 0.0.0.0/0 or ::/0 source | No implied default source, hierarchical firewall evaluation, route or target reachability simulation |
 | GCP-BUCKET-DESTROY | force_destroy becomes true, including creation with true | Does not mean bucket is being deleted in this plan |
 | GCP-BUCKET-ACCESS | uniform_bucket_level_access becomes false | Does not inspect object ACLs |
@@ -22,7 +24,7 @@ Arrays are reported as a changed parent path in the generic diff. Unknown marker
 
 ## Provider references
 
-Attribute semantics were checked against the provider documentation during implementation. Fixtures are synthetic plan fragments; they do not constitute a compatibility matrix for every provider version.
+Attribute semantics were checked against the provider documentation during implementation. GCP rule fixtures are synthetic plan fragments. Complete plans generated with Terraform 1.15.7 exercise the generic parser using the built-in provider; they do not constitute a Google provider compatibility matrix.
 
 - [Storage bucket](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/storage_bucket)
 - [Compute firewall](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/compute_firewall)

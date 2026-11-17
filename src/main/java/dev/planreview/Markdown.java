@@ -65,6 +65,20 @@ public final class Markdown {
           .append("; unknown paths: ")
           .append(escape(c.unknownPaths().toString()))
           .append("\n");
+    b.append("\n## Check coverage\n\n");
+    b.append("Status | Rule | Resource | Reason\n--- | --- | --- | ---\n");
+    for (var check : r.checks())
+      b.append(check.status())
+          .append(" | ")
+          .append(check.ruleId())
+          .append(" | ")
+          .append(escape(check.resource()))
+          .append(" | ")
+          .append(check.reasonCode())
+          .append("\n");
+    b.append("\nPlan completeness: ")
+        .append(r.summary().complete())
+        .append(" (null = not reported).\n");
     b.append("\n## Limits\n\n");
     r.limitations().forEach(l -> b.append("- ").append(l).append("\n"));
     return b.toString();

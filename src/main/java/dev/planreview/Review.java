@@ -8,6 +8,7 @@ public record Review(
     Summary summary,
     List<Change> changes,
     List<Finding> findings,
+    List<Check> checks,
     List<String> limitations) {
   public record Summary(
       int changedResources,
@@ -16,7 +17,10 @@ public record Review(
       int high,
       int medium,
       int resourcesWithoutSpecializedChecks,
-      boolean complete) {}
+      Boolean complete,
+      int checksExecuted,
+      int checksSkipped,
+      int itemsWithoutSpecializedChecks) {}
 
   public record Change(
       String address,
@@ -27,6 +31,8 @@ public record Review(
       String coverage,
       String previousAddress,
       boolean importing) {}
+
+  public record Check(String resource, String ruleId, String status, String reasonCode) {}
 
   public record Evidence(String path, JsonNode before, JsonNode after) {}
 

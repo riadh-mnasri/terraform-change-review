@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>dev.planreview</groupId>
   <artifactId>terraform-change-review</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
   <name>Terraform Change Review</name>
   <description>Evidence-based Terraform change review for CLI and MCP clients.</description>
   <url>https://github.com/riadh-mnasri/terraform-change-review</url>
@@ -53,6 +53,9 @@
   <build>
     <finalName>terraform-change-review</finalName>
     <plugins>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-clean-plugin</artifactId><version>3.2.0</version></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.3.1</version></plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.3.0</version></plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -83,7 +86,7 @@
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>META-INF/*.DSA</exclude>
                     <exclude>module-info.class</exclude>
-                  <exclude>META-INF/versions/**/module-info.class</exclude>
+                    <exclude>META-INF/versions/**/module-info.class</exclude>
                   </excludes>
                 </filter>
               </filters>
