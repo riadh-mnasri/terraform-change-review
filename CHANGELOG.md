@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Add five Google-provider plan exports and regression tests for selected IAM, firewall and bucket transitions, generated against fabricated local state without cloud apply.
+- Document fixture regeneration, tested versions, expected findings and limits; expand README guidance for interpreting reports.
+
 ## 0.1.0 — 2026-11-16
 
 - Local Terraform JSON plan inventory across resources and outputs.
