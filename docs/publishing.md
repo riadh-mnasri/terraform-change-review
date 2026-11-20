@@ -25,6 +25,8 @@ The script checks for GPG, GitHub CLI authentication and the two existing token 
 
 Choose a passphrase you can retain securely. If the script stops after exporting the key, keep the file and use it to finish setting the GitHub secret; do not generate another key or delete the export until the secrets are configured. The script deliberately refuses to overwrite an existing export.
 
+If Gradle reports a PGP checksum mismatch, do not guess the passphrase in GitHub. Run `bash scripts/update-maven-central-signing-password.sh`. This helper checks the entered phrase against the locally exported key before updating `MAVEN_CENTRAL_SIGNING_PASSWORD`; if the check fails, it leaves the GitHub secret untouched.
+
 ## Publish
 
 After the namespace and all four secrets are configured, run **Publish to Maven Central** from the GitHub Actions tab on the default branch. The workflow verifies the Gradle wrapper, builds the project, signs the publication, and sends it to the Central Portal. Review the resulting deployment in Central Portal and wait for validation before announcing the artifact.
