@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     kotlin("jvm") version "2.4.21"
     id("org.jetbrains.dokka-javadoc") version "2.2.0"
@@ -70,8 +72,11 @@ publishing {
 }
 
 signing {
+    val signingKey = providers.gradleProperty("signingKeyBase64").orNull?.let {
+        String(Base64.getDecoder().decode(it), Charsets.UTF_8)
+    }
     useInMemoryPgpKeys(
-        providers.gradleProperty("signingKey").orNull,
+        signingKey,
         providers.gradleProperty("signingPassword").orNull,
     )
     sign(publishing.publications["mavenJava"])
