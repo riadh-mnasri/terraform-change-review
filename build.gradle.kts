@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm") version "2.4.21"
     id("org.jetbrains.dokka-javadoc") version "2.2.0"
     application
-    id("com.gradleup.shadow") version "9.3.0"
+    id("com.gradleup.shadow") version "9.6.1"
     id("io.github.sgtsilvio.gradle.maven-central-publishing") version "0.6.0"
     `maven-publish`
     signing
