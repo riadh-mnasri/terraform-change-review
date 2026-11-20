@@ -8,7 +8,7 @@ Maven Central will expose the ordinary JVM library artifact with its dependency 
 
 1. Create or use a Sonatype Central Portal account and verify the `io.github.riadh-mnasri` namespace. The namespace must be verified before the first publication.
 2. Create a Central Portal user token. Add its username and password to the repository Actions secrets as `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`.
-3. Create an OpenPGP signing key and publish its public key to a public keyserver. The helper script below can export the private key and configure its two GitHub secrets without printing either secret.
+3. Create an OpenPGP signing key and publish its public key to a public keyserver. The helper script below can export the private key and configure its two GitHub secrets without printing either secret. The private key is base64-encoded before it is stored so GitHub Actions can transport it as a single-line secret without altering the armored key.
 4. Confirm the version in `gradle.properties` has never been published. Maven Central releases are immutable; use a new version for every subsequent release.
 
 Do not commit credentials or signing keys, and do not pass them on a command line that may be recorded in shell history. Use the repository Actions secrets for the GitHub workflow.
@@ -21,7 +21,7 @@ After `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD` have been saved as r
 bash scripts/setup-maven-central-signing.sh
 ```
 
-The script checks for GPG, GitHub CLI authentication and the two existing token secrets. It starts GPG's interactive key-generation dialog, asks which new key to use, and asks before publishing the public key to Ubuntu Keyserver. It then writes the armored private key with owner-only permissions under `~/.config/terraform-change-review/` and pipes that file and the passphrase into GitHub CLI to set the signing secrets. It never prints the private key or passphrase. The script does not publish the Maven artifact.
+The script checks for GPG, GitHub CLI authentication and the two existing token secrets. It starts GPG's interactive key-generation dialog, asks which new key to use, and asks before publishing the public key to Ubuntu Keyserver. It then writes the armored private key with owner-only permissions under `~/.config/terraform-change-review/`, base64-encodes it into the `MAVEN_CENTRAL_SIGNING_KEY_BASE64` GitHub secret, and sends the passphrase to `MAVEN_CENTRAL_SIGNING_PASSWORD`. Gradle decodes the key in memory before signing. The script never prints the private key or passphrase and does not publish the Maven artifact.
 
 Choose a passphrase you can retain securely. If the script stops after exporting the key, keep the file and use it to finish setting the GitHub secret; do not generate another key or delete the export until the secrets are configured. The script deliberately refuses to overwrite an existing export.
 

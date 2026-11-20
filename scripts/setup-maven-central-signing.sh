@@ -11,7 +11,7 @@ fail() {
     exit 1
 }
 
-for command_name in gpg gh awk grep; do
+for command_name in gpg gh awk grep base64 tr; do
     command -v "$command_name" >/dev/null 2>&1 || fail "commande manquante : ${command_name}"
 done
 
@@ -59,7 +59,8 @@ gpg --armor --export-secret-keys "$fingerprint" > "$PRIVATE_KEY_FILE"
 [[ -s "$PRIVATE_KEY_FILE" ]] || fail 'l’export de la clé privée est vide'
 chmod 600 "$PRIVATE_KEY_FILE"
 
-gh secret set MAVEN_CENTRAL_SIGNING_KEY --repo "$REPOSITORY" < "$PRIVATE_KEY_FILE"
+base64 < "$PRIVATE_KEY_FILE" | tr -d '\r\n' | \
+    gh secret set MAVEN_CENTRAL_SIGNING_KEY_BASE64 --repo "$REPOSITORY"
 
 read -r -s -p 'Saisissez la phrase secrète de la clé GPG (elle ne sera pas affichée) : ' signing_password
 printf '\n'
@@ -71,7 +72,7 @@ secret_names="$(gh secret list --repo "$REPOSITORY" | awk '{ print $1 }')"
 for configured_secret in \
     MAVEN_CENTRAL_USERNAME \
     MAVEN_CENTRAL_PASSWORD \
-    MAVEN_CENTRAL_SIGNING_KEY \
+    MAVEN_CENTRAL_SIGNING_KEY_BASE64 \
     MAVEN_CENTRAL_SIGNING_PASSWORD; do
     if ! printf '%s\n' "$secret_names" | grep -qxF "$configured_secret"; then
         fail "GitHub ne liste pas le secret attendu : ${configured_secret}"
