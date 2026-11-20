@@ -19,7 +19,7 @@ dependencies {
     implementation(kotlin("stdlib"))
     implementation("org.slf4j:slf4j-nop:2.0.17")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
-    implementation("io.modelcontextprotocol.sdk:mcp:2.1.0")
+    implementation("io.modelcontextprotocol.sdk:mcp:2.2.0")
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
 }
